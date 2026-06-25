@@ -120,6 +120,8 @@ async function getTripleWhale(){
   try{
     const today=todayET();
     // Official endpoint: /api/v2/summary-page/get-data with period object
+    // todayHour = current hour in ET (0-23), required by TW API
+    const todayHour = new Date().toLocaleString("en-US",{timeZone:"America/New_York",hour:"numeric",hour12:false});
     const res=await fetch("https://api.triplewhale.com/api/v2/summary-page/get-data",{
       method:"POST",
       headers:{"Content-Type":"application/json","x-api-key":TW_API_KEY},
@@ -129,6 +131,7 @@ async function getTripleWhale(){
           start: today,
           end:   today,
         },
+        todayHour: parseInt(todayHour)||12,
       }),
     });
     log(`TW status: ${res.status}`);
