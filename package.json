@@ -1,0 +1,16 @@
+{
+  "name": "quasi-supply-chain-sync",
+  "version": "1.0.0",
+  "description": "Daily supply chain sync — Shopify + Triple Whale + ShipSidekick",
+  "main": "sync.js",
+  "scripts": {
+    "sync": "node sync.js",
+    "start": "node sync.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
