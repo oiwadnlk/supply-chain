@@ -87,16 +87,7 @@ async function getSSKInventory(){
     }
 
     log(`SSK total inventory levels: ${allItems.length}`);
-    // Debug: log raw fields for Bio Collagen
-    const bcItem = allItems.find(i=>i.productVariant?.sku==="GLOWUP-ORIGINAL-QUAS");
-    if(bcItem) log(`SSK Bio Collagen raw: ${JSON.stringify({
-      availableQuantity:bcItem.availableQuantity,
-      onHandQuantity:bcItem.onHandQuantity,
-      committedQuantity:bcItem.committedQuantity,
-      incomingQuantity:bcItem.incomingQuantity,
-      reservedQuantity:bcItem.reservedQuantity,
-      allKeys:Object.keys(bcItem).join(",")
-    })}`);
+
 
     // Map SKU → availableQuantity
     // Structure: { availableQuantity, productVariant: { sku, skuAliases } }
@@ -109,11 +100,10 @@ async function getSSKInventory(){
       const onHand   = item.onHandQuantity ?? item.incomingQuantity ?? 0;
       const committed= item.committedQuantity ?? 0;
       const qty = avail > 0 ? avail : Math.max(0, onHand - committed);
-      // Map by primary SKU
-      if(variant.sku) inv[variant.sku]=qty;
-      // Also map by SKU aliases
+      // Keep the HIGHEST available quantity per SKU (multiple warehouse entries may exist)
+      if(variant.sku) inv[variant.sku] = Math.max(inv[variant.sku]??0, qty);
       for(const alias of (variant.skuAliases??[])){
-        if(alias) inv[alias]=qty;
+        if(alias) inv[alias] = Math.max(inv[alias]??0, qty);
       }
     }
 
@@ -242,9 +232,7 @@ async function getShopifyOrdersToday(){
     }
   }
   log(`Today: ${orders} orders / $${revenue.toFixed(2)} / ${units} units`);
-  // Log top SKUs sold today for debugging
-  const topSkus = Object.entries(skuSalesToday).sort((a,b)=>b[1].units-a[1].units).slice(0,8);
-  topSkus.forEach(([sku,data])=>log(`  Today SKU "${sku}": ${data.units} units`));
+
   return {ordersToday:orders,revenueToday:Math.round(revenue),unitsToday:units,preOrdersPending:preorders,skuSalesToday};
 }
 
