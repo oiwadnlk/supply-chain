@@ -238,13 +238,29 @@ async function getShopifyOrdersToday(){
 
 // ── Shopify orders 7d ─────────────────────────────────────────────────────────
 async function getShopifyOrders7d(){
-  log("Fetching 7d orders...");
+  log("Fetching 7d orders (paginated)...");
   const since=new Date(daysAgoET(7)+"T04:00:00.000Z").toISOString();
-  const data=await shopifyREST(
-    `/orders.json?status=any&limit=250&fields=id,line_items&created_at_min=${encodeURIComponent(since)}`
-  );
+  let allOrders=[], pageInfo=null, page=0;
+  while(true){
+    page++;
+    let url;
+    if(pageInfo){
+      url=`/orders.json?limit=250&fields=id,line_items&page_info=${pageInfo}`;
+    } else {
+      url=`/orders.json?status=any&limit=250&fields=id,line_items&created_at_min=${encodeURIComponent(since)}`;
+    }
+    const resp=await shopifyRESTWithHeaders(url);
+    allOrders=[...allOrders,...(resp.data.orders||[])];
+    log(`7d page ${page}: ${resp.data.orders?.length||0} (total: ${allOrders.length})`);
+    const link=resp.headers?.get?.("Link")||"";
+    const nextMatch=link.match(/page_info=([^&>]+)[^>]*>;\s*rel="next"/);
+    if(nextMatch && resp.data.orders?.length===250){ pageInfo=nextMatch[1]; }
+    else break;
+    if(page>40) break;
+  }
+  log(`7d total orders: ${allOrders.length}`);
   const skuSales7d={};
-  for(const o of data.orders){
+  for(const o of allOrders){
     for(const item of o.line_items){
       if(!item.sku) continue;
       if(!skuSales7d[item.sku]) skuSales7d[item.sku]={units:0,revenue:0};
