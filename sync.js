@@ -141,8 +141,8 @@ async function getSSKInbound(){
 async function getTripleWhale(){
   log("Fetching Triple Whale...");
   try{
-    const today=todayET();
-    // Official endpoint: /api/v2/summary-page/get-data with period object
+    const yday=yesterdayET();
+    // Pull yesterday's complete data
     const res=await fetch("https://api.triplewhale.com/api/v2/summary-page/get-data",{
       method:"POST",
       headers:{"Content-Type":"application/json","x-api-key":TW_API_KEY},
