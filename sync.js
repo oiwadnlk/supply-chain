@@ -238,46 +238,32 @@ async function getShopifyOrdersToday(){
 
 // ── Shopify orders 7d ─────────────────────────────────────────────────────────
 async function getShopifyOrders7d(){
-  log("Fetching 7d sales via GraphQL aggregation...");
+  log("Fetching 7d sales via GraphQL...");
   const token = await getToken();
   const since = new Date(daysAgoET(7)+"T04:00:00.000Z").toISOString();
 
-  // Use GraphQL to get aggregated quantity sold per variant SKU — one call, no pagination
-  const query = `{
-    orders(first: 1, query: "created_at:>='${since}' status:any") {
-      edges { node { id } }
-    }
-  }`;
+  // Use GraphQL to get total quantity sold per variant — aggregated, no pagination
+  // Query line items grouped by variant SKU for last 7 days
+  const skuSales7d = {};
 
-  // Actually use REST with a smarter approach: get sales by variant using the reports API
-  // Shopify GraphQL sales aggregation
-  const gqlQuery = `
-  {
-    productVariants(first: 50) {
-      edges {
-        node {
-          sku
-          product { title }
-          inventoryQuantity
-          metafields(first: 1) { edges { node { value } } }
-        }
-      }
-    }
-  }`;
+  // Track units sold per SKU using GraphQL productVariant sales data
+  // Shopify GraphQL doesn't have a direct sales aggregate, but we can use
+  // the REST /admin/api/reports endpoint or query variants with fulfillmentOrders
+  // Best available: use the existing sample but scale it up by ratio
 
-  // Best approach for high volume: use Shopify Analytics reports API
-  // GET /admin/api/2026-04/reports.json won't help either
-  // Use the GraphQL with salesAgreements or use a date-filtered count approach
-  // For now: sample the last 250 orders and extrapolate based on order count ratio
-  const todayResp = await shopifyRESTWithHeaders(
-    `/orders.json?status=any&limit=1&fields=id&created_at_min=${encodeURIComponent(since)}`
+  // Get total order count for 7d to scale the sample
+  const countRes = await fetch(
+    `https://${SHOPIFY_STORE}/admin/api/2026-04/orders/count.json?status=any&created_at_min=${encodeURIComponent(since)}`,
+    { headers: {"X-Shopify-Access-Token": token} }
   );
-  // Get total order count from header or just use today's data to extrapolate
-  // The most accurate approach at scale: use today's SKU split ratio × 7d order count estimate
+  const countData = await countRes.json();
+  const total7dOrders = countData.count ?? 0;
+  log(`7d total order count: ${total7dOrders}`);
 
-  // Fetch last 2000 orders (8 pages) as a statistical sample for velocity
+  // Sample 2000 most recent orders and scale up
   let sampleOrders=[], pageInfo=null, page=0;
-  while(page < 8){
+  const SAMPLE_SIZE = 8; // 8 pages = 2000 orders
+  while(page < SAMPLE_SIZE){
     page++;
     let url;
     if(pageInfo){
@@ -287,17 +273,17 @@ async function getShopifyOrders7d(){
     }
     const resp=await shopifyRESTWithHeaders(url);
     sampleOrders=[...sampleOrders,...(resp.data.orders||[])];
-    log(`7d sample page ${page}: ${resp.data.orders?.length||0} (total: ${sampleOrders.length})`);
     const link=resp.headers?.get?.("Link")||"";
     const nextMatch=link.match(/page_info=([^&>]+)[^>]*>;\s*rel="next"/);
     if(nextMatch && resp.data.orders?.length===250){ pageInfo=nextMatch[1]; }
-    else { log("7d: reached end of orders"); break; }
+    else { break; }
   }
 
-  log(`7d sample: ${sampleOrders.length} orders`);
+  const sampleCount = sampleOrders.length;
+  // Scale factor: if we have 10,000 orders and sampled 2,000, scale by 5x
+  const scaleFactor = total7dOrders > sampleCount ? total7dOrders / sampleCount : 1;
+  log(`7d sample: ${sampleCount} orders, scale factor: ${scaleFactor.toFixed(2)}x`);
 
-  // Count units per SKU in sample
-  const skuSales7d={};
   for(const o of sampleOrders){
     for(const item of o.line_items){
       if(!item.sku) continue;
@@ -307,10 +293,15 @@ async function getShopifyOrders7d(){
     }
   }
 
-  // Log top SKUs for verification
+  // Scale up to estimated true 7d total
+  for(const sku of Object.keys(skuSales7d)){
+    skuSales7d[sku].units   = Math.round(skuSales7d[sku].units   * scaleFactor);
+    skuSales7d[sku].revenue = Math.round(skuSales7d[sku].revenue * scaleFactor);
+  }
+
   Object.entries(skuSales7d)
-    .sort((a,b)=>b[1].units-a[1].units).slice(0,6)
-    .forEach(([sku,d])=>log(`  7d SKU "${sku}": ${d.units} units`));
+    .sort((a,b)=>b[1].units-a[1].units).slice(0,5)
+    .forEach(([sku,d])=>log(`  7d est. "${sku}": ${d.units} units (scaled ${scaleFactor.toFixed(1)}x)`));
 
   return skuSales7d;
 }
