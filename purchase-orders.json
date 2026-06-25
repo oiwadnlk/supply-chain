@@ -1,0 +1,15 @@
+[
+  {
+    "poNumber": "PO-001",
+    "sskSku": "SALMON-MASK-QUAS",
+    "productName": "Salmon PDRM Mask",
+    "status": "pending",
+    "qty": 76032,
+    "containers": 1,
+    "orderDate": "2026-06-25",
+    "productionDays": 20,
+    "shippingDays": 40,
+    "expectedArrival": "2026-09-02",
+    "notes": "Emergency PO — stockout imminent"
+  }
+]
