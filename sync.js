@@ -53,6 +53,15 @@ async function shopifyREST(path){
   if(!res.ok) throw new Error(`Shopify ${res.status}: ${path}`);
   return res.json();
 }
+async function shopifyRESTWithHeaders(path){
+  const token=await getToken();
+  const res=await fetch(`https://${SHOPIFY_STORE}/admin/api/2026-04${path}`,{
+    headers:{"X-Shopify-Access-Token":token,"Content-Type":"application/json"},
+  });
+  if(!res.ok) throw new Error(`Shopify ${res.status}: ${path}`);
+  const data=await res.json();
+  return {data, headers:res.headers};
+}
 
 // ── ShipSidekick — /api/v1/inventory/levels (confirmed working) ───────────────
 async function getSSKInventory(){
@@ -78,6 +87,16 @@ async function getSSKInventory(){
     }
 
     log(`SSK total inventory levels: ${allItems.length}`);
+    // Debug: log raw fields for Bio Collagen
+    const bcItem = allItems.find(i=>i.productVariant?.sku==="GLOWUP-ORIGINAL-QUAS");
+    if(bcItem) log(`SSK Bio Collagen raw: ${JSON.stringify({
+      availableQuantity:bcItem.availableQuantity,
+      onHandQuantity:bcItem.onHandQuantity,
+      committedQuantity:bcItem.committedQuantity,
+      incomingQuantity:bcItem.incomingQuantity,
+      reservedQuantity:bcItem.reservedQuantity,
+      allKeys:Object.keys(bcItem).join(",")
+    })}`);
 
     // Map SKU → availableQuantity
     // Structure: { availableQuantity, productVariant: { sku, skuAliases } }
@@ -185,19 +204,28 @@ async function getShopifyOrdersToday(){
   log("Fetching today's orders...");
   const since=startOfTodayET();
   log(`Fetching orders since ${since}`);
-  // Remove financial_status filter — catches subscriptions, all payment types
-  // Use limit=250 and paginate if needed
+  // Paginate through ALL orders today using cursor-based pagination
   let allOrders=[], pageInfo=null, page=0;
   while(true){
     page++;
-    const cursor = pageInfo ? `&page_info=${pageInfo}` : `&created_at_min=${encodeURIComponent(since)}`;
-    const url = `/orders.json?status=any&limit=250&fields=id,total_price,line_items,tags,created_at${pageInfo?"":cursor}`;
-    const data = await shopifyREST(url);
-    allOrders=[...allOrders,...(data.orders||[])];
-    log(`Orders page ${page}: ${data.orders?.length||0} orders (total: ${allOrders.length})`);
-    // Check for next page
-    const linkHeader = null; // REST doesn't easily paginate here, use 250 limit
-    break; // Single page for now - 250 is usually enough for one day
+    let url;
+    if(pageInfo){
+      url = `/orders.json?limit=250&fields=id,total_price,line_items,tags&page_info=${pageInfo}`;
+    } else {
+      url = `/orders.json?status=any&limit=250&fields=id,total_price,line_items,tags&created_at_min=${encodeURIComponent(since)}`;
+    }
+    const resp = await shopifyRESTWithHeaders(url);
+    allOrders=[...allOrders,...(resp.data.orders||[])];
+    log(`Orders page ${page}: ${resp.data.orders?.length||0} (total: ${allOrders.length})`);
+    // Extract next page cursor from Link header
+    const link = resp.headers?.get?.("Link")||resp.headers?.Link||"";
+    const nextMatch = link.match(/page_info=([^&>]+)[^>]*>;\s*rel="next"/);
+    if(nextMatch && resp.data.orders?.length===250){
+      pageInfo = nextMatch[1];
+    } else {
+      break;
+    }
+    if(page>20) break; // safety
   }
   const data = {orders: allOrders};
   let orders=0,revenue=0,units=0,preorders=0;
