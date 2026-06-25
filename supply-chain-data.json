@@ -1,18 +1,18 @@
 {
-  "syncedAt": "2026-06-25T17:01:39.578Z",
+  "syncedAt": "2026-06-25T17:03:50.624Z",
   "inventorySource": "ShipSidekick (Doral Warehouse)",
   "summary": {
-    "totalUnitsAllSKUs": 160061,
+    "totalUnitsAllSKUs": 160062,
     "skusInStockout": 1,
     "skusCritical": 0,
     "ordersToday": 250,
-    "revenueToday": 19300,
-    "unitsToday": 888,
+    "revenueToday": 19317,
+    "unitsToday": 889,
     "preOrdersPending": 0,
     "blendedROAS": 1.76,
-    "adSpend": null,
-    "blendedSales": 190177.36,
-    "netRevenue": 190177.36
+    "adSpend": 108241.26888807886,
+    "blendedSales": 190177.36000000002,
+    "netRevenue": 184076.58000000002
   },
   "products": [
     {
@@ -21,15 +21,15 @@
       "shopifySku": "QUASI-GLOWUP-OG",
       "dropship": false,
       "stock": 0,
-      "units7d": 469,
-      "unitsToday": 469,
-      "revenue7d": 16382,
-      "dailyAvg": 67,
+      "units7d": 471,
+      "unitsToday": 471,
+      "revenue7d": 16462,
+      "dailyAvg": 67.3,
       "daysOfSupply": 0,
       "weeksOfSupply": 0,
-      "reorderPoint": 4221,
+      "reorderPoint": 4240,
       "needsReorder": true,
-      "reorderQty": 7437,
+      "reorderQty": 7470,
       "status": "stockout"
     },
     {
@@ -37,7 +37,7 @@
       "sskSku": "SALMON-MASK-QUAS",
       "shopifySku": "QUASI-GLOWUP-SALMON",
       "dropship": false,
-      "stock": 2832,
+      "stock": 2833,
       "units7d": 243,
       "unitsToday": 243,
       "revenue7d": 8347,
@@ -46,7 +46,7 @@
       "weeksOfSupply": 11.7,
       "reorderPoint": 2186,
       "needsReorder": false,
-      "reorderQty": 1020,
+      "reorderQty": 1019,
       "status": "healthy"
     },
     {
@@ -55,13 +55,13 @@
       "shopifySku": "199284415690",
       "dropship": false,
       "stock": 88224,
-      "units7d": 105,
-      "unitsToday": 105,
-      "revenue7d": 4079,
-      "dailyAvg": 15,
-      "daysOfSupply": 5882,
-      "weeksOfSupply": 840.3,
-      "reorderPoint": 945,
+      "units7d": 104,
+      "unitsToday": 104,
+      "revenue7d": 4040,
+      "dailyAvg": 14.9,
+      "daysOfSupply": 5921,
+      "weeksOfSupply": 845.9,
+      "reorderPoint": 939,
       "needsReorder": false,
       "reorderQty": 0,
       "status": "healthy"
@@ -135,7 +135,7 @@
       "sskSku": "GLOWUP-ORIGINAL-QUAS",
       "stock": 0,
       "daysLeft": 0,
-      "orderQty": 7437,
+      "orderQty": 7470,
       "urgency": "IMMEDIATE"
     }
   ],
