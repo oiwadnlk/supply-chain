@@ -17,7 +17,8 @@ jobs:
       - run: npm ci
       - name: Run sync
         env:
-          SHOPIFY_TOKEN: ${{ secrets.SHOPIFY_TOKEN }}
+          SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
+          SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
           TW_API_KEY: ${{ secrets.TW_API_KEY }}
           SSK_API_KEY: ${{ secrets.SSK_API_KEY }}
         run: node sync.js
