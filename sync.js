@@ -149,10 +149,7 @@ async function getTripleWhale(){
     const metricsArr = Array.isArray(data?.metrics) ? data.metrics : [];
     log(`TW metrics count: ${metricsArr.length}`);
     // Log first few metric IDs so we can see what's available
-    // Log all metrics containing spend/ads keywords
-    metricsArr
-      .filter(m=>JSON.stringify(m).toLowerCase().includes("spend")||JSON.stringify(m).toLowerCase().includes("ads")||JSON.stringify(m).toLowerCase().includes("roas"))
-      .forEach(m=>log(`  TW metric: id=${m.id}, metricId=${m.metricId}, current=${m?.values?.current}`));
+    // metrics array parsed successfully
 
     const findMetric = (...ids) => {
       for(const m of metricsArr){
@@ -161,9 +158,9 @@ async function getTripleWhale(){
       return null;
     };
     const roas  = findMetric("blendedRoas","blended-roas","roas","ROAS","blendedROAS");
-    const spend = findMetric("totalSpend","total-spend","blendedSpend","spend","adSpend","ads","blended-spend","totalAds","blendedAdSpend","totalBlendedAdSpend","adCost","totalAdCost");
+    const spend = findMetric("blendedAds","blendedAdSpend","totalSpend","total-spend","blendedSpend","spend","adSpend","ads");
     const sales = findMetric("blendedSales","blended-sales","totalSales","sales","total-sales");
-    const rev   = findMetric("netRevenue","net-revenue","orderRevenue","revenue","order-revenue","netSales","totalSales","sales");
+    const rev   = findMetric("netSales","net-revenue","netRevenue","orderRevenue");
 
     log(`TW extracted: ROAS=${roas}, spend=${spend}, sales=${sales}, rev=${rev}`);
     return {blendedROAS:roas, totalSpend:spend, blendedSales:sales, netRevenue:rev};
