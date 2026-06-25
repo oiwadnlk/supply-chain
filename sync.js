@@ -23,12 +23,16 @@ const TARGET_COVERAGE_DAYS = 90;
 
 function log(msg){ console.log(`[${new Date().toISOString()}] ${msg}`); }
 function todayET(){ return new Date().toLocaleDateString("en-CA",{timeZone:"America/New_York"}); }
-function startOfTodayET(){
-  // Get midnight ET as UTC
-  // EDT = UTC-4, EST = UTC-5
-  // June = EDT so midnight ET = 04:00 UTC
-  const etDate = todayET(); // "2026-06-25"
-  return etDate + "T04:00:00.000Z"; // midnight EDT
+function yesterdayET(){
+  const d=new Date();
+  d.setDate(d.getDate()-1);
+  return d.toLocaleDateString("en-CA",{timeZone:"America/New_York"});
+}
+function startOfYesterdayET(){
+  return yesterdayET()+"T04:00:00.000Z"; // midnight EDT start of yesterday
+}
+function endOfYesterdayET(){
+  return todayET()+"T04:00:00.000Z"; // midnight EDT = end of yesterday
 }
 function daysAgoET(n){ const d=new Date(); d.setDate(d.getDate()-n); return d.toLocaleDateString("en-CA",{timeZone:"America/New_York"}); }
 
@@ -139,18 +143,16 @@ async function getTripleWhale(){
   try{
     const today=todayET();
     // Official endpoint: /api/v2/summary-page/get-data with period object
-    // todayHour = current hour in ET (0-23), required by TW API
-    const todayHour = new Date().toLocaleString("en-US",{timeZone:"America/New_York",hour:"numeric",hour12:false});
     const res=await fetch("https://api.triplewhale.com/api/v2/summary-page/get-data",{
       method:"POST",
       headers:{"Content-Type":"application/json","x-api-key":TW_API_KEY},
       body:JSON.stringify({
         shopDomain: SHOPIFY_STORE,
         period: {
-          start: today,
-          end:   today,
+          start: yday,
+          end:   yday,
         },
-        todayHour: parseInt(todayHour)||12,
+        todayHour: 23,
       }),
     });
     log(`TW status: ${res.status}`);
@@ -190,101 +192,103 @@ async function getTripleWhale(){
 }
 
 // ── Shopify orders today ──────────────────────────────────────────────────────
-async function getShopifyOrdersToday(){
-  log("Fetching today's orders...");
-  const since=startOfTodayET();
-  log(`Fetching orders since ${since}`);
-  // Paginate through ALL orders today using cursor-based pagination
+async function getShopifyOrdersYesterday(){
+  log("Fetching YESTERDAY US orders only...");
+  const since = startOfYesterdayET();
+  const until = endOfYesterdayET();
+  log(`Yesterday: ${since} → ${until}`);
+
   let allOrders=[], pageInfo=null, page=0;
   while(true){
     page++;
     let url;
     if(pageInfo){
-      url = `/orders.json?limit=250&fields=id,total_price,line_items,tags&page_info=${pageInfo}`;
+      url=`/orders.json?limit=250&fields=id,total_price,line_items,tags,shipping_address&page_info=${pageInfo}`;
     } else {
-      url = `/orders.json?status=any&limit=250&fields=id,total_price,line_items,tags&created_at_min=${encodeURIComponent(since)}`;
+      url=`/orders.json?status=any&limit=250&fields=id,total_price,line_items,tags,shipping_address&created_at_min=${encodeURIComponent(since)}&created_at_max=${encodeURIComponent(until)}`;
     }
-    const resp = await shopifyRESTWithHeaders(url);
+    const resp=await shopifyRESTWithHeaders(url);
     allOrders=[...allOrders,...(resp.data.orders||[])];
-    log(`Orders page ${page}: ${resp.data.orders?.length||0} (total: ${allOrders.length})`);
-    // Extract next page cursor from Link header
-    const link = resp.headers?.get?.("Link")||resp.headers?.Link||"";
-    const nextMatch = link.match(/page_info=([^&>]+)[^>]*>;\s*rel="next"/);
-    if(nextMatch && resp.data.orders?.length===250){
-      pageInfo = nextMatch[1];
-    } else {
-      break;
-    }
-    if(page>20) break; // safety
+    log(`Yesterday page ${page}: ${resp.data.orders?.length||0} (total: ${allOrders.length})`);
+    const link=resp.headers?.get?.("Link")||"";
+    const m=link.match(/page_info=([^&>]+)[^>]*>; rel="next"/);
+    if(m && resp.data.orders?.length===250){ pageInfo=m[1]; }
+    else break;
+    if(page>20) break;
   }
-  const data = {orders: allOrders};
+
+  // Filter US only (3PL fulfills US, China fulfills intl)
+  const usOrders=allOrders.filter(o=>{
+    const c=o.shipping_address?.country_code??o.shipping_address?.country??"";
+    return c.toUpperCase()==="US"||c.toLowerCase()==="united states";
+  });
+  const usPct=allOrders.length>0?Math.round(usOrders.length/allOrders.length*100):0;
+  log(`Yesterday: ${allOrders.length} total, ${usOrders.length} US (${usPct}%), ${allOrders.length-usOrders.length} intl`);
+
   let orders=0,revenue=0,units=0,preorders=0;
-  const skuSalesToday={};
-  for(const o of data.orders){
+  const skuSalesYesterday={};
+  for(const o of usOrders){
     orders++;revenue+=parseFloat(o.total_price||0);
     if((o.tags||"").toLowerCase().includes("pre-order")) preorders++;
     for(const item of o.line_items){
       units+=item.quantity;
       if(!item.sku) continue;
-      if(!skuSalesToday[item.sku]) skuSalesToday[item.sku]={units:0,revenue:0};
-      skuSalesToday[item.sku].units+=item.quantity;
-      skuSalesToday[item.sku].revenue+=item.quantity*parseFloat(item.price||0);
+      if(!skuSalesYesterday[item.sku]) skuSalesYesterday[item.sku]={units:0,revenue:0};
+      skuSalesYesterday[item.sku].units+=item.quantity;
+      skuSalesYesterday[item.sku].revenue+=item.quantity*parseFloat(item.price||0);
     }
   }
-  log(`Today: ${orders} orders / $${revenue.toFixed(2)} / ${units} units`);
-
-  return {ordersToday:orders,revenueToday:Math.round(revenue),unitsToday:units,preOrdersPending:preorders,skuSalesToday};
+  log(`Yesterday US: ${orders} orders / $${revenue.toFixed(2)} / ${units} units`);
+  return {ordersYesterday:orders,revenueYesterday:Math.round(revenue),
+    unitsYesterday:units,preOrdersPending:preorders,skuSalesYesterday,
+    totalOrders:allOrders.length,usOrders:usOrders.length,usSplit:usPct};
 }
-
-// ── Shopify orders 7d ─────────────────────────────────────────────────────────
 async function getShopifyOrders7d(){
-  log("Fetching 7d sales via GraphQL...");
+  log("Fetching 7d US orders (sampled + scaled)...");
   const token = await getToken();
+  // Pull last 7 complete days ending at end of yesterday
   const since = new Date(daysAgoET(7)+"T04:00:00.000Z").toISOString();
+  const until = endOfYesterdayET();
 
-  // Use GraphQL to get total quantity sold per variant — aggregated, no pagination
-  // Query line items grouped by variant SKU for last 7 days
-  const skuSales7d = {};
-
-  // Track units sold per SKU using GraphQL productVariant sales data
-  // Shopify GraphQL doesn't have a direct sales aggregate, but we can use
-  // the REST /admin/api/reports endpoint or query variants with fulfillmentOrders
-  // Best available: use the existing sample but scale it up by ratio
-
-  // Get total order count for 7d to scale the sample
+  // Get total US order count for scaling
   const countRes = await fetch(
-    `https://${SHOPIFY_STORE}/admin/api/2026-04/orders/count.json?status=any&created_at_min=${encodeURIComponent(since)}`,
+    `https://${SHOPIFY_STORE}/admin/api/2026-04/orders/count.json?status=any&created_at_min=${encodeURIComponent(since)}&created_at_max=${encodeURIComponent(until)}`,
     { headers: {"X-Shopify-Access-Token": token} }
   );
   const countData = await countRes.json();
   const total7dOrders = countData.count ?? 0;
   log(`7d total order count: ${total7dOrders}`);
 
-  // Sample 2000 most recent orders and scale up
+  // Sample 2000 orders with shipping address for US filter
   let sampleOrders=[], pageInfo=null, page=0;
-  const SAMPLE_SIZE = 8; // 8 pages = 2000 orders
-  while(page < SAMPLE_SIZE){
+  while(page < 8){
     page++;
     let url;
     if(pageInfo){
-      url=`/orders.json?limit=250&fields=id,line_items&page_info=${pageInfo}`;
+      url=`/orders.json?limit=250&fields=id,line_items,shipping_address&page_info=${pageInfo}`;
     } else {
-      url=`/orders.json?status=any&limit=250&fields=id,line_items&created_at_min=${encodeURIComponent(since)}`;
+      url=`/orders.json?status=any&limit=250&fields=id,line_items,shipping_address&created_at_min=${encodeURIComponent(since)}&created_at_max=${encodeURIComponent(until)}`;
     }
     const resp=await shopifyRESTWithHeaders(url);
     sampleOrders=[...sampleOrders,...(resp.data.orders||[])];
     const link=resp.headers?.get?.("Link")||"";
     const nextMatch=link.match(/page_info=([^&>]+)[^>]*>;\s*rel="next"/);
     if(nextMatch && resp.data.orders?.length===250){ pageInfo=nextMatch[1]; }
-    else { break; }
+    else break;
   }
 
-  const sampleCount = sampleOrders.length;
-  // Scale factor: if we have 10,000 orders and sampled 2,000, scale by 5x
-  const scaleFactor = total7dOrders > sampleCount ? total7dOrders / sampleCount : 1;
-  log(`7d sample: ${sampleCount} orders, scale factor: ${scaleFactor.toFixed(2)}x`);
+  // Filter to US only
+  const usSample = sampleOrders.filter(o=>{
+    const c=o.shipping_address?.country_code??o.shipping_address?.country??"";
+    return c.toUpperCase()==="US"||c.toLowerCase()==="united states";
+  });
+  const usSamplePct = sampleOrders.length>0?usSample.length/sampleOrders.length:0.7;
+  const estimatedTotalUS = Math.round(total7dOrders * usSamplePct);
+  const scaleFactor = estimatedTotalUS > usSample.length ? estimatedTotalUS / usSample.length : 1;
+  log(`7d sample: ${sampleOrders.length} total, ${usSample.length} US (${Math.round(usSamplePct*100)}%), scale: ${scaleFactor.toFixed(2)}x`);
 
-  for(const o of sampleOrders){
+  const skuSales7d={};
+  for(const o of usSample){
     for(const item of o.line_items){
       if(!item.sku) continue;
       if(!skuSales7d[item.sku]) skuSales7d[item.sku]={units:0,revenue:0};
@@ -293,21 +297,20 @@ async function getShopifyOrders7d(){
     }
   }
 
-  // Scale up to estimated true 7d total
+  // Scale to full 7d estimate
   for(const sku of Object.keys(skuSales7d)){
     skuSales7d[sku].units   = Math.round(skuSales7d[sku].units   * scaleFactor);
     skuSales7d[sku].revenue = Math.round(skuSales7d[sku].revenue * scaleFactor);
   }
 
-  Object.entries(skuSales7d)
-    .sort((a,b)=>b[1].units-a[1].units).slice(0,5)
-    .forEach(([sku,d])=>log(`  7d est. "${sku}": ${d.units} units (scaled ${scaleFactor.toFixed(1)}x)`));
+  Object.entries(skuSales7d).sort((a,b)=>b[1].units-a[1].units).slice(0,5)
+    .forEach(([sku,d])=>log(`  7d US est. "${sku}": ${d.units} units/7d = ${Math.round(d.units/7)}/day`));
 
   return skuSales7d;
 }
 
 // ── Calculations ──────────────────────────────────────────────────────────────
-function calcProducts(inv, skuSales7d, skuSalesToday){
+function calcProducts(inv, skuSales7d, skuSalesYesterday){
   return PRODUCTS.map(p=>{
     if(p.dropship) return {name:p.name,sskSku:"dropship",dropship:true,
       stock:"dropship",units7d:0,unitsToday:0,dailyAvg:0,daysOfSupply:null,
@@ -315,7 +318,7 @@ function calcProducts(inv, skuSales7d, skuSalesToday){
     // SSK inventory keyed by sskSku; fallback to shopifySku
     const stock=Math.max(0,inv[p.sskSku]??inv[p.shopifySku]??0);
     const units7d=skuSales7d[p.shopifySku]?.units??0;
-    const unitsToday=skuSalesToday[p.shopifySku]?.units??0;
+    const unitsToday=skuSalesYesterday[p.shopifySku]?.units??0;
     const revenue7d=skuSales7d[p.shopifySku]?.revenue??0;
     const dailyAvg=Math.round((units7d/7)*10)/10;
     const daysOfSupply=dailyAvg>0?Math.round(stock/dailyAvg):(stock>0?999:0);
@@ -340,12 +343,12 @@ async function main(){
   if(!TW_API_KEY)            throw new Error("Missing TW_API_KEY");
   if(!SSK_API_KEY)           throw new Error("Missing SSK_API_KEY");
 
-  const [sskInv, sskInbound, today, sales7d, tw] = await Promise.all([
+  const [sskInv, sskInbound, yesterday, sales7d, tw] = await Promise.all([
     getSSKInventory(), getSSKInbound(),
-    getShopifyOrdersToday(), getShopifyOrders7d(), getTripleWhale(),
+    getShopifyOrdersYesterday(), getShopifyOrders7d(), getTripleWhale(),
   ]);
 
-  const products=calcProducts(sskInv||{}, sales7d, today.skuSalesToday);
+  const products=calcProducts(sskInv||{}, sales7d, yesterday.skuSalesYesterday);
   const tracked=products.filter(p=>!p.dropship);
   const reorderAlerts=tracked.filter(p=>p.needsReorder).map(p=>({
     name:p.name,sskSku:p.sskSku,stock:p.stock,daysLeft:p.daysOfSupply,orderQty:p.reorderQty,
@@ -359,8 +362,9 @@ async function main(){
       totalUnitsAllSKUs:tracked.reduce((a,p)=>a+(typeof p.stock==="number"?p.stock:0),0),
       skusInStockout:tracked.filter(p=>p.status==="stockout").length,
       skusCritical:tracked.filter(p=>p.status==="critical").length,
-      ordersToday:today.ordersToday, revenueToday:today.revenueToday,
-      unitsToday:today.unitsToday,   preOrdersPending:today.preOrdersPending,
+      ordersYesterday:yesterday.ordersYesterday, revenueYesterday:yesterday.revenueYesterday,
+      unitsYesterday:yesterday.unitsYesterday, preOrdersPending:yesterday.preOrdersPending,
+      usSplit:yesterday.usSplit,
       blendedROAS:tw.blendedROAS,    adSpend:tw.totalSpend,
       blendedSales:tw.blendedSales,  netRevenue:tw.netRevenue,
     },
@@ -371,7 +375,7 @@ async function main(){
   log("=== SYNC COMPLETE ===");
   log(`Inventory source: ${report.inventorySource}`);
   log(`Total units: ${report.summary.totalUnitsAllSKUs}`);
-  log(`Orders today: ${today.ordersToday} / $${today.revenueToday}`);
+  log(`Orders today: ${yesterday.ordersYesterday} / $${yesterday.revenueYesterday}`);
   log(`TW: ROAS=${tw.blendedROAS}, spend=${tw.totalSpend}`);
 }
 
