@@ -1,0 +1,174 @@
+{
+  "syncedAt": "2026-06-25T04:47:00.256Z",
+  "summary": {
+    "totalUnitsAllSKUs": 0,
+    "skusInStockout": 7,
+    "skusCritical": 0,
+    "ordersToday": 250,
+    "revenueToday": 19586,
+    "unitsToday": 849,
+    "blendedROAS7d": null,
+    "adSpend7d": null,
+    "revenue7d": null,
+    "preOrdersPending": 0
+  },
+  "skus": [
+    {
+      "sku": "BCM-001",
+      "name": "Bio Collagen Mask",
+      "stock": 0,
+      "units7d": 0,
+      "revenue7d": 0,
+      "dailyAvg": 0,
+      "daysOfSupply": 999,
+      "weeksOfSupply": 142.7,
+      "reorderPoint": 0,
+      "needsReorder": true,
+      "reorderQty": 0,
+      "status": "stockout"
+    },
+    {
+      "sku": "SPM-002",
+      "name": "Salmon PDRM Mask",
+      "stock": 0,
+      "units7d": 0,
+      "revenue7d": 0,
+      "dailyAvg": 0,
+      "daysOfSupply": 999,
+      "weeksOfSupply": 142.7,
+      "reorderPoint": 0,
+      "needsReorder": true,
+      "reorderQty": 0,
+      "status": "stockout"
+    },
+    {
+      "sku": "NSM-003",
+      "name": "Night Sealing Mask",
+      "stock": 0,
+      "units7d": 0,
+      "revenue7d": 0,
+      "dailyAvg": 0,
+      "daysOfSupply": 999,
+      "weeksOfSupply": 142.7,
+      "reorderPoint": 0,
+      "needsReorder": true,
+      "reorderQty": 0,
+      "status": "stockout"
+    },
+    {
+      "sku": "NKM-004",
+      "name": "Neck Mask",
+      "stock": 0,
+      "units7d": 0,
+      "revenue7d": 0,
+      "dailyAvg": 0,
+      "daysOfSupply": 999,
+      "weeksOfSupply": 142.7,
+      "reorderPoint": 0,
+      "needsReorder": true,
+      "reorderQty": 0,
+      "status": "stockout"
+    },
+    {
+      "sku": "CHM-005",
+      "name": "Chest Mask",
+      "stock": 0,
+      "units7d": 0,
+      "revenue7d": 0,
+      "dailyAvg": 0,
+      "daysOfSupply": 999,
+      "weeksOfSupply": 142.7,
+      "reorderPoint": 0,
+      "needsReorder": true,
+      "reorderQty": 0,
+      "status": "stockout"
+    },
+    {
+      "sku": "MBS-006",
+      "name": "Multi Balm Stick",
+      "stock": 0,
+      "units7d": 0,
+      "revenue7d": 0,
+      "dailyAvg": 0,
+      "daysOfSupply": 999,
+      "weeksOfSupply": 142.7,
+      "reorderPoint": 0,
+      "needsReorder": true,
+      "reorderQty": 0,
+      "status": "stockout"
+    },
+    {
+      "sku": "EYP-007",
+      "name": "Eye Patches",
+      "stock": 0,
+      "units7d": 0,
+      "revenue7d": 0,
+      "dailyAvg": 0,
+      "daysOfSupply": 999,
+      "weeksOfSupply": 142.7,
+      "reorderPoint": 0,
+      "needsReorder": true,
+      "reorderQty": 0,
+      "status": "stockout"
+    }
+  ],
+  "reorderAlerts": [
+    {
+      "sku": "BCM-001",
+      "name": "Bio Collagen Mask",
+      "stock": 0,
+      "daysLeft": 999,
+      "orderQty": 0,
+      "urgency": "IMMEDIATE"
+    },
+    {
+      "sku": "SPM-002",
+      "name": "Salmon PDRM Mask",
+      "stock": 0,
+      "daysLeft": 999,
+      "orderQty": 0,
+      "urgency": "IMMEDIATE"
+    },
+    {
+      "sku": "NSM-003",
+      "name": "Night Sealing Mask",
+      "stock": 0,
+      "daysLeft": 999,
+      "orderQty": 0,
+      "urgency": "IMMEDIATE"
+    },
+    {
+      "sku": "NKM-004",
+      "name": "Neck Mask",
+      "stock": 0,
+      "daysLeft": 999,
+      "orderQty": 0,
+      "urgency": "IMMEDIATE"
+    },
+    {
+      "sku": "CHM-005",
+      "name": "Chest Mask",
+      "stock": 0,
+      "daysLeft": 999,
+      "orderQty": 0,
+      "urgency": "IMMEDIATE"
+    },
+    {
+      "sku": "MBS-006",
+      "name": "Multi Balm Stick",
+      "stock": 0,
+      "daysLeft": 999,
+      "orderQty": 0,
+      "urgency": "IMMEDIATE"
+    },
+    {
+      "sku": "EYP-007",
+      "name": "Eye Patches",
+      "stock": 0,
+      "daysLeft": 999,
+      "orderQty": 0,
+      "urgency": "IMMEDIATE"
+    }
+  ],
+  "inboundContainers": []
+}
