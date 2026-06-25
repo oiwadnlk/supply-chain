@@ -1,8 +1,8 @@
 {
-  "syncedAt": "2026-06-25T18:03:16.428Z",
+  "syncedAt": "2026-06-25T18:05:26.400Z",
   "inventorySource": "ShipSidekick (Doral Warehouse)",
   "summary": {
-    "totalUnitsAllSKUs": 596675,
+    "totalUnitsAllSKUs": 596645,
     "skusInStockout": 0,
     "skusCritical": 1,
     "ordersYesterday": 2200,
@@ -10,10 +10,10 @@
     "unitsYesterday": 7565,
     "preOrdersPending": 0,
     "usSplit": 88,
-    "blendedROAS": null,
-    "adSpend": null,
-    "blendedSales": null,
-    "netRevenue": null
+    "blendedROAS": 1.85,
+    "adSpend": 115285.1847201843,
+    "blendedSales": 213281.69,
+    "netRevenue": 211598.33000000002
   },
   "products": [
     {
@@ -21,7 +21,7 @@
       "sskSku": "GLOWUP-ORIGINAL-QUAS",
       "shopifySku": "QUASI-GLOWUP-OG",
       "dropship": false,
-      "stock": 436744,
+      "stock": 436730,
       "units7d": 27444,
       "unitsToday": 3668,
       "revenue7d": 945387,
@@ -38,7 +38,7 @@
       "sskSku": "SALMON-MASK-QUAS",
       "shopifySku": "QUASI-GLOWUP-SALMON",
       "dropship": false,
-      "stock": 2753,
+      "stock": 2744,
       "units7d": 20122,
       "unitsToday": 2446,
       "revenue7d": 607228,
@@ -47,7 +47,7 @@
       "weeksOfSupply": 0.1,
       "reorderPoint": 181100,
       "needsReorder": true,
-      "reorderQty": 316328,
+      "reorderQty": 316337,
       "status": "critical"
     },
     {
@@ -55,7 +55,7 @@
       "sskSku": "NECK-QUAS",
       "shopifySku": "199284415690",
       "dropship": false,
-      "stock": 88180,
+      "stock": 88175,
       "units7d": 6294,
       "unitsToday": 746,
       "revenue7d": 243024,
@@ -64,7 +64,7 @@
       "weeksOfSupply": 14,
       "reorderPoint": 56643,
       "needsReorder": false,
-      "reorderQty": 11620,
+      "reorderQty": 11625,
       "status": "healthy"
     },
     {
@@ -72,7 +72,7 @@
       "sskSku": "SEALING-OIL-QUAS",
       "shopifySku": "25341366",
       "dropship": false,
-      "stock": 21928,
+      "stock": 21927,
       "units7d": 459,
       "unitsToday": 61,
       "revenue7d": 17892,
@@ -89,7 +89,7 @@
       "sskSku": "CHEST-QUAS",
       "shopifySku": "199284450646",
       "dropship": false,
-      "stock": 47070,
+      "stock": 47069,
       "units7d": 257,
       "unitsToday": 34,
       "revenue7d": 8744,
@@ -134,9 +134,9 @@
     {
       "name": "Salmon PDRM Mask",
       "sskSku": "SALMON-MASK-QUAS",
-      "stock": 2753,
+      "stock": 2744,
       "daysLeft": 1,
-      "orderQty": 316328,
+      "orderQty": 316337,
       "urgency": "HIGH"
     }
   ],
