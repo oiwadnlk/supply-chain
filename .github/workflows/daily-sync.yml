@@ -1,8 +1,11 @@
 name: Quasi Supply Chain Daily Sync
 
 on:
+  # Runs at midnight ET (05:00 UTC = 00:00 EDT)
   schedule:
-    - cron: '0 11 * * *'
+    - cron: '0 5 * * *'
+
+  # Allow manual trigger from GitHub Actions tab
   workflow_dispatch:
 
 jobs:
@@ -24,7 +27,7 @@ jobs:
         run: node sync.js
       - name: Save data
         run: |
-          git config user.email "bot@quasi.com"
+          git config user.email "bot@supply-chain.com"
           git config user.name "Supply Chain Bot"
           git add supply-chain-data.json
           git diff --staged --quiet || git commit -m "sync $(date +'%Y-%m-%d')"
