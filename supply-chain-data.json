@@ -1,12 +1,12 @@
 {
-  "syncedAt": "2026-06-25T12:55:48.521Z",
+  "syncedAt": "2026-06-25T16:31:23.483Z",
   "summary": {
     "totalUnitsAllSKUs": 0,
     "skusInStockout": 5,
     "skusCritical": 0,
     "ordersToday": 250,
-    "revenueToday": 19256,
-    "unitsToday": 827,
+    "revenueToday": 19231,
+    "unitsToday": 862,
     "preOrdersPending": 0,
     "blendedROAS": null,
     "adSpend": null,
@@ -20,15 +20,15 @@
       "shopifySku": "QUASI-GLOWUP-OG",
       "dropship": false,
       "stock": 0,
-      "units7d": 377,
-      "unitsToday": 377,
-      "revenue7d": 12991,
-      "dailyAvg": 53.9,
+      "units7d": 451,
+      "unitsToday": 451,
+      "revenue7d": 15914,
+      "dailyAvg": 64.4,
       "daysOfSupply": 0,
       "weeksOfSupply": 0,
-      "reorderPoint": 3396,
+      "reorderPoint": 4057,
       "needsReorder": true,
-      "reorderQty": 5983,
+      "reorderQty": 7148,
       "status": "stockout"
     },
     {
@@ -37,15 +37,15 @@
       "shopifySku": "QUASI-GLOWUP-SALMON",
       "dropship": false,
       "stock": 0,
-      "units7d": 257,
-      "unitsToday": 257,
-      "revenue7d": 8807,
-      "dailyAvg": 36.7,
+      "units7d": 237,
+      "unitsToday": 237,
+      "revenue7d": 8173,
+      "dailyAvg": 33.9,
       "daysOfSupply": 0,
       "weeksOfSupply": 0,
-      "reorderPoint": 2312,
+      "reorderPoint": 2136,
       "needsReorder": true,
-      "reorderQty": 4074,
+      "reorderQty": 3763,
       "status": "stockout"
     },
     {
@@ -54,15 +54,15 @@
       "shopifySku": "199284415690",
       "dropship": false,
       "stock": 0,
-      "units7d": 104,
-      "unitsToday": 104,
-      "revenue7d": 4047,
-      "dailyAvg": 14.9,
+      "units7d": 100,
+      "unitsToday": 100,
+      "revenue7d": 3884,
+      "dailyAvg": 14.3,
       "daysOfSupply": 0,
       "weeksOfSupply": 0,
-      "reorderPoint": 939,
+      "reorderPoint": 901,
       "needsReorder": true,
-      "reorderQty": 1654,
+      "reorderQty": 1587,
       "status": "stockout"
     },
     {
@@ -71,15 +71,15 @@
       "shopifySku": "25341366",
       "dropship": false,
       "stock": 0,
-      "units7d": 17,
-      "unitsToday": 17,
-      "revenue7d": 665,
-      "dailyAvg": 2.4,
+      "units7d": 13,
+      "unitsToday": 13,
+      "revenue7d": 507,
+      "dailyAvg": 1.9,
       "daysOfSupply": 0,
       "weeksOfSupply": 0,
-      "reorderPoint": 151,
+      "reorderPoint": 120,
       "needsReorder": true,
-      "reorderQty": 266,
+      "reorderQty": 211,
       "status": "stockout"
     },
     {
@@ -88,15 +88,15 @@
       "shopifySku": "199284450646",
       "dropship": false,
       "stock": 0,
-      "units7d": 7,
-      "unitsToday": 7,
-      "revenue7d": 253,
-      "dailyAvg": 1,
+      "units7d": 3,
+      "unitsToday": 3,
+      "revenue7d": 117,
+      "dailyAvg": 0.4,
       "daysOfSupply": 0,
       "weeksOfSupply": 0,
-      "reorderPoint": 63,
+      "reorderPoint": 25,
       "needsReorder": true,
-      "reorderQty": 111,
+      "reorderQty": 44,
       "status": "stockout"
     },
     {
@@ -134,7 +134,7 @@
       "sskSku": "GLOWUP-ORIGINAL-QUAS",
       "stock": 0,
       "daysLeft": 0,
-      "orderQty": 5983,
+      "orderQty": 7148,
       "urgency": "IMMEDIATE"
     },
     {
@@ -142,7 +142,7 @@
       "sskSku": "SALMON-MASK-QUAS",
       "stock": 0,
       "daysLeft": 0,
-      "orderQty": 4074,
+      "orderQty": 3763,
       "urgency": "IMMEDIATE"
     },
     {
@@ -150,7 +150,7 @@
       "sskSku": "NECK-QUAS",
       "stock": 0,
       "daysLeft": 0,
-      "orderQty": 1654,
+      "orderQty": 1587,
       "urgency": "IMMEDIATE"
     },
     {
@@ -158,7 +158,7 @@
       "sskSku": "SEALING-OIL-QUAS",
       "stock": 0,
       "daysLeft": 0,
-      "orderQty": 266,
+      "orderQty": 211,
       "urgency": "IMMEDIATE"
     },
     {
@@ -166,10 +166,9 @@
       "sskSku": "CHEST-QUAS",
       "stock": 0,
       "daysLeft": 0,
-      "orderQty": 111,
+      "orderQty": 44,
       "urgency": "IMMEDIATE"
     }
   ],
-  "inboundContainers": [],
-  "dataSourceNote": "Inventory: ShipSidekick (available units) | Sales: Shopify | Marketing: Triple Whale"
+  "inboundContainers": []
 }
