@@ -145,14 +145,22 @@ async function getTripleWhale(){
     const data=JSON.parse(raw);
 
     // Navigate the response structure
-    const d=data?.data??data?.summary??data?.metrics??data;
-    log(`TW top-level keys: ${Object.keys(d||{}).join(", ")}`);
+    // TW returns { metrics: [ {id, metricId, values: {current, previous}}, ... ] }
+    const metricsArr = Array.isArray(data?.metrics) ? data.metrics : [];
+    log(`TW metrics count: ${metricsArr.length}`);
+    // Log first few metric IDs so we can see what's available
+    metricsArr.slice(0,10).forEach(m=>log(`  TW metric: id=${m.id}, metricId=${m.metricId}, current=${m?.values?.current}`));
 
-    // Try common field names for each metric
-    const roas  = d?.blendedRoas   ?? d?.["blended-roas"]  ?? d?.roas        ?? d?.ROAS        ?? null;
-    const spend = d?.totalSpend    ?? d?.["total-spend"]   ?? d?.adSpend     ?? d?.spend       ?? d?.blendedSpend ?? null;
-    const sales = d?.blendedSales  ?? d?.["blended-sales"] ?? d?.totalSales  ?? d?.revenue     ?? null;
-    const rev   = d?.netRevenue    ?? d?.["net-revenue"]   ?? d?.orderRevenue ?? null;
+    const findMetric = (...ids) => {
+      for(const m of metricsArr){
+        if(ids.includes(m.id)||ids.includes(m.metricId)) return m?.values?.current??null;
+      }
+      return null;
+    };
+    const roas  = findMetric("blendedRoas","blended-roas","roas","ROAS","blendedROAS");
+    const spend = findMetric("totalSpend","total-spend","blendedSpend","spend","adSpend","ads","blended-spend");
+    const sales = findMetric("blendedSales","blended-sales","totalSales","sales","total-sales");
+    const rev   = findMetric("netRevenue","net-revenue","orderRevenue","revenue","order-revenue");
 
     log(`TW extracted: ROAS=${roas}, spend=${spend}, sales=${sales}, rev=${rev}`);
     return {blendedROAS:roas, totalSpend:spend, blendedSales:sales, netRevenue:rev};
