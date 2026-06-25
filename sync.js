@@ -1,19 +1,18 @@
 /**
  * Quasi Supply Chain — Daily Sync Script
- * Pulls from Shopify, Triple Whale, and ShipSidekick
- * Runs every morning at 6 AM via GitHub Actions
- *
- * SETUP: copy .env.example → .env and fill in your keys
+ * Shopify + Triple Whale + ShipSidekick
+ * Uses Shopify Admin API with Client Credentials
  */
 
 require("dotenv").config();
 const fs = require("fs");
 
 // ─── CONFIG ────────────────────────────────────────────────────────────────
-const SHOPIFY_STORE   = "e1c5f3-7e.myshopify.com";
-const SHOPIFY_TOKEN   = process.env.SHOPIFY_TOKEN;
-const TW_API_KEY      = process.env.TW_API_KEY;
-const SSK_API_KEY     = process.env.SSK_API_KEY;
+const SHOPIFY_STORE    = "e1c5f3-7e.myshopify.com";
+const SHOPIFY_CLIENT_ID     = process.env.SHOPIFY_CLIENT_ID;
+const SHOPIFY_CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
+const TW_API_KEY       = process.env.TW_API_KEY;
+const SSK_API_KEY      = process.env.SSK_API_KEY;
 
 const SKU_MAP = {
   "BCM-001": "Bio Collagen Mask",
@@ -25,108 +24,117 @@ const SKU_MAP = {
   "EYP-007": "Eye Patches",
 };
 
-// Lead time settings (weeks)
-const LEAD_TIME_PKG_READY = 9;
-const LEAD_TIME_NO_PKG    = 11;
-const SAFETY_STOCK_DAYS   = 21;
+const LEAD_TIME_PKG_READY  = 9;
+const LEAD_TIME_NO_PKG     = 11;
+const SAFETY_STOCK_DAYS    = 21;
 const TARGET_COVERAGE_DAYS = 90;
 
 // ─── HELPERS ───────────────────────────────────────────────────────────────
 function log(msg) {
-  const ts = new Date().toISOString();
-  console.log(`[${ts}] ${msg}`);
+  console.log(`[${new Date().toISOString()}] ${msg}`);
 }
-
 function today() {
   return new Date().toISOString().split("T")[0];
 }
-
 function daysAgo(n) {
   const d = new Date();
   d.setDate(d.getDate() - n);
   return d.toISOString().split("T")[0];
 }
 
-async function fetchJSON(url, options = {}) {
-  const res = await fetch(url, options);
+// ─── SHOPIFY ACCESS TOKEN (Client Credentials) ─────────────────────────────
+let _shopifyToken = null;
+
+async function getShopifyToken() {
+  if (_shopifyToken) return _shopifyToken;
+  log("Getting Shopify access token via client credentials...");
+
+  // Use the client_credentials grant for server-to-server access
+  const credentials = Buffer.from(
+    `${SHOPIFY_CLIENT_ID}:${SHOPIFY_CLIENT_SECRET}`
+  ).toString("base64");
+
+  const res = await fetch(
+    `https://${SHOPIFY_STORE}/admin/oauth/access_token`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Basic ${credentials}`,
+      },
+      body: JSON.stringify({
+        client_id: SHOPIFY_CLIENT_ID,
+        client_secret: SHOPIFY_CLIENT_SECRET,
+        grant_type: "client_credentials",
+      }),
+    }
+  );
+
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`HTTP ${res.status} from ${url}: ${text}`);
+    // Fallback: try using client secret directly as access token
+    // (some Dev Dashboard apps use the secret as the API password)
+    log("Client credentials flow failed, trying direct secret auth...");
+    _shopifyToken = SHOPIFY_CLIENT_SECRET;
+    return _shopifyToken;
   }
-  return res.json();
+
+  const data = await res.json();
+  _shopifyToken = data.access_token;
+  log("Got Shopify access token");
+  return _shopifyToken;
 }
 
-// ─── SHOPIFY ───────────────────────────────────────────────────────────────
-async function shopifyGraphQL(query, variables = {}) {
+// ─── SHOPIFY GRAPHQL ───────────────────────────────────────────────────────
+async function shopifyGraphQL(query) {
+  const token = await getShopifyToken();
   const res = await fetch(
     `https://${SHOPIFY_STORE}/admin/api/2026-04/graphql.json`,
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Shopify-Access-Token": SHOPIFY_TOKEN,
+        "X-Shopify-Access-Token": token,
       },
-      body: JSON.stringify({ query, variables }),
+      body: JSON.stringify({ query }),
     }
   );
   const json = await res.json();
-  if (json.errors) throw new Error(JSON.stringify(json.errors));
+  if (json.errors) {
+    throw new Error(`Shopify GraphQL error: ${JSON.stringify(json.errors)}`);
+  }
   return json.data;
 }
 
-async function getShopifyInventory() {
-  log("Fetching Shopify inventory by SKU...");
-  const query = `
+// ─── SHOPIFY REST (fallback for inventory) ─────────────────────────────────
+async function shopifyREST(path) {
+  const token = await getShopifyToken();
+  const res = await fetch(
+    `https://${SHOPIFY_STORE}/admin/api/2026-04${path}`,
     {
-      products(first: 50) {
-        edges {
-          node {
-            title
-            variants(first: 20) {
-              edges {
-                node {
-                  sku
-                  inventoryQuantity
-                  inventoryItem {
-                    id
-                    inventoryLevels(first: 5) {
-                      edges {
-                        node {
-                          quantities(names: ["available"]) {
-                            name
-                            quantity
-                          }
-                          location {
-                            name
-                            id
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
+      headers: {
+        "X-Shopify-Access-Token": token,
+        "Content-Type": "application/json",
+      },
     }
-  `;
-  const data = await shopifyGraphQL(query);
+  );
+  if (!res.ok) {
+    throw new Error(`Shopify REST ${res.status}: ${path}`);
+  }
+  return res.json();
+}
+
+// ─── INVENTORY ─────────────────────────────────────────────────────────────
+async function getShopifyInventory() {
+  log("Fetching Shopify inventory...");
+  const data = await shopifyREST("/products.json?limit=250&fields=title,variants");
   const inventory = {};
-  for (const { node: product } of data.products.edges) {
-    for (const { node: variant } of product.variants.edges) {
+  for (const product of data.products) {
+    for (const variant of product.variants) {
       if (!variant.sku) continue;
-      // Sum available across all locations (ShipSidekick syncs to Shopify)
-      let total = 0;
-      for (const { node: level } of variant.inventoryItem.inventoryLevels.edges) {
-        const avail = level.quantities.find(q => q.name === "available");
-        if (avail) total += avail.quantity;
-      }
       inventory[variant.sku] = {
         sku: variant.sku,
         productName: product.title,
-        stock: total,
+        stock: variant.inventory_quantity ?? 0,
       };
     }
   }
@@ -134,49 +142,28 @@ async function getShopifyInventory() {
   return inventory;
 }
 
+// ─── ORDERS 7 DAYS ─────────────────────────────────────────────────────────
 async function getShopifyOrders7Days() {
   log("Fetching Shopify orders (last 7 days)...");
   const since = daysAgo(7);
-  const query = `
-    {
-      orders(first: 250, query: "created_at:>='${since}' financial_status:paid") {
-        edges {
-          node {
-            id
-            totalPriceSet { shopMoney { amount } }
-            lineItems(first: 20) {
-              edges {
-                node {
-                  sku
-                  quantity
-                  originalUnitPriceSet { shopMoney { amount } }
-                }
-              }
-            }
-            tags
-            createdAt
-          }
-        }
-      }
-    }
-  `;
-  const data = await shopifyGraphQL(query);
+  const data = await shopifyREST(
+    `/orders.json?status=any&financial_status=paid&created_at_min=${since}T00:00:00Z&limit=250&fields=id,total_price,line_items,tags,created_at`
+  );
+
   const skuSales = {};
   let totalOrders = 0;
   let totalRevenue = 0;
   let preOrderCount = 0;
 
-  for (const { node: order } of data.orders.edges) {
+  for (const order of data.orders) {
     totalOrders++;
-    totalRevenue += parseFloat(order.totalPriceSet.shopMoney.amount);
-    if (order.tags.includes("pre-order")) preOrderCount++;
-
-    for (const { node: item } of order.lineItems.edges) {
+    totalRevenue += parseFloat(order.total_price || 0);
+    if ((order.tags || "").includes("pre-order")) preOrderCount++;
+    for (const item of order.line_items) {
       if (!item.sku) continue;
       if (!skuSales[item.sku]) skuSales[item.sku] = { units: 0, revenue: 0 };
       skuSales[item.sku].units += item.quantity;
-      skuSales[item.sku].revenue +=
-        item.quantity * parseFloat(item.originalUnitPriceSet.shopMoney.amount);
+      skuSales[item.sku].revenue += item.quantity * parseFloat(item.price || 0);
     }
   }
 
@@ -184,48 +171,28 @@ async function getShopifyOrders7Days() {
   return { skuSales, totalOrders, totalRevenue, preOrderCount };
 }
 
+// ─── ORDERS TODAY ──────────────────────────────────────────────────────────
 async function getShopifyOrdersToday() {
   log("Fetching Shopify orders today...");
-  const since = today();
-  const query = `
-    {
-      orders(first: 250, query: "created_at:>='${since}' financial_status:paid") {
-        edges {
-          node {
-            id
-            totalPriceSet { shopMoney { amount } }
-            lineItems(first: 20) {
-              edges {
-                node {
-                  sku
-                  quantity
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  `;
-  const data = await shopifyGraphQL(query);
+  const data = await shopifyREST(
+    `/orders.json?status=any&financial_status=paid&created_at_min=${today()}T00:00:00Z&limit=250&fields=id,total_price,line_items`
+  );
+
   let ordersToday = 0;
   let revenueToday = 0;
   let unitsToday = 0;
-  for (const { node: order } of data.orders.edges) {
+  for (const order of data.orders) {
     ordersToday++;
-    revenueToday += parseFloat(order.totalPriceSet.shopMoney.amount);
-    for (const { node: item } of order.lineItems.edges) {
-      unitsToday += item.quantity;
-    }
+    revenueToday += parseFloat(order.total_price || 0);
+    for (const item of order.line_items) unitsToday += item.quantity;
   }
   return { ordersToday, revenueToday, unitsToday };
 }
 
 // ─── TRIPLE WHALE ──────────────────────────────────────────────────────────
 async function getTripleWhaleStats() {
-  log("Fetching Triple Whale blended stats...");
+  log("Fetching Triple Whale stats...");
   try {
-    // Triple Whale Summary Stats endpoint
     const res = await fetch(
       "https://api.triplewhale.com/api/v2/tw-metrics/get-metrics-data",
       {
@@ -238,26 +205,16 @@ async function getTripleWhaleStats() {
           shopDomain: SHOPIFY_STORE,
           startDate: daysAgo(7),
           endDate: today(),
-          metrics: [
-            "blended-roas",
-            "total-spend",
-            "net-revenue",
-            "orders",
-            "cpa",
-          ],
+          metrics: ["blended-roas", "total-spend", "net-revenue", "orders", "cpa"],
         }),
       }
     );
-
-    if (!res.ok) throw new Error(`Triple Whale HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-
     return {
       blendedROAS: data?.["blended-roas"] ?? null,
       totalSpend:  data?.["total-spend"]  ?? null,
       netRevenue:  data?.["net-revenue"]  ?? null,
-      orders:      data?.["orders"]       ?? null,
-      cpa:         data?.["cpa"]          ?? null,
     };
   } catch (err) {
     log(`Triple Whale error (non-fatal): ${err.message}`);
@@ -269,60 +226,49 @@ async function getTripleWhaleStats() {
 async function getShipSidekickInventory() {
   log("Fetching ShipSidekick inventory...");
   try {
-    const res = await fetch(
-      "https://www.shipsidekick.com/api/v1/inventory",
-      {
-        headers: {
-          "Authorization": `Bearer ${SSK_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-    if (!res.ok) throw new Error(`ShipSidekick HTTP ${res.status}`);
+    const res = await fetch("https://www.shipsidekick.com/api/v1/inventory", {
+      headers: {
+        "Authorization": `Bearer ${SSK_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    // Normalize to { sku: quantity } map
     const inv = {};
     const items = data?.inventory ?? data?.items ?? data ?? [];
-    for (const item of items) {
+    for (const item of Array.isArray(items) ? items : []) {
       const sku = item.sku ?? item.SKU ?? item.product_sku;
       const qty = item.quantity ?? item.available ?? item.onHand ?? 0;
       if (sku) inv[sku] = qty;
     }
-    log(`ShipSidekick: ${Object.keys(inv).length} SKUs found`);
+    log(`ShipSidekick: ${Object.keys(inv).length} SKUs`);
     return inv;
   } catch (err) {
-    log(`ShipSidekick error (non-fatal): ${err.message}`);
-    log("Falling back to Shopify inventory levels");
+    log(`ShipSidekick inventory error (non-fatal): ${err.message}`);
     return null;
   }
 }
 
 async function getShipSidekickInbound() {
-  log("Fetching ShipSidekick inbound ASNs...");
+  log("Fetching ShipSidekick inbound POs...");
   try {
-    const res = await fetch(
-      "https://www.shipsidekick.com/api/v1/purchase-orders",
-      {
-        headers: {
-          "Authorization": `Bearer ${SSK_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-    if (!res.ok) throw new Error(`ShipSidekick ASN HTTP ${res.status}`);
+    const res = await fetch("https://www.shipsidekick.com/api/v1/purchase-orders", {
+      headers: {
+        "Authorization": `Bearer ${SSK_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const orders = data?.purchaseOrders ?? data?.orders ?? data ?? [];
-    // Return pending/in-transit POs
-    return orders.filter(o =>
-      ["pending","in_transit","shipped","open"].includes(
-        (o.status ?? "").toLowerCase()
-      )
-    ).map(o => ({
-      poNumber:    o.poNumber ?? o.po_number ?? o.id,
-      status:      o.status,
-      qty:         o.totalQuantity ?? o.quantity ?? 0,
-      expectedDate: o.expectedDate ?? o.expected_date ?? o.eta,
-    }));
+    return (Array.isArray(orders) ? orders : [])
+      .filter(o => ["pending","in_transit","shipped","open"].includes((o.status ?? "").toLowerCase()))
+      .map(o => ({
+        poNumber:     o.poNumber ?? o.po_number ?? o.id,
+        status:       o.status,
+        qty:          o.totalQuantity ?? o.quantity ?? 0,
+        expectedDate: o.expectedDate ?? o.expected_date ?? o.eta,
+      }));
   } catch (err) {
     log(`ShipSidekick ASN error (non-fatal): ${err.message}`);
     return [];
@@ -331,98 +277,40 @@ async function getShipSidekickInbound() {
 
 // ─── CALCULATIONS ──────────────────────────────────────────────────────────
 function calcSKUMetrics(inventory, skuSales7d, sskInventory) {
-  const results = [];
-
-  for (const [sku, name] of Object.entries(SKU_MAP)) {
+  return Object.entries(SKU_MAP).map(([sku, name]) => {
     const shopifyStock = inventory[sku]?.stock ?? 0;
-    // Prefer ShipSidekick inventory if available (more accurate warehouse count)
     const stock = sskInventory?.[sku] ?? shopifyStock;
     const units7d = skuSales7d[sku]?.units ?? 0;
     const revenue7d = skuSales7d[sku]?.revenue ?? 0;
     const dailyAvg = Math.round((units7d / 7) * 10) / 10;
     const daysOfSupply = dailyAvg > 0 ? Math.round(stock / dailyAvg) : 999;
-    const weeksOfSupply = Math.round(daysOfSupply / 7 * 10) / 10;
     const reorderPoint = Math.round(dailyAvg * LEAD_TIME_PKG_READY * 7);
-    const needsReorder = stock <= reorderPoint;
-
-    // Recommended order qty
     const targetUnits = Math.round(dailyAvg * (TARGET_COVERAGE_DAYS + SAFETY_STOCK_DAYS));
     const reorderQty = Math.max(0, targetUnits - stock);
-
-    // Status
     let status = "healthy";
     if (stock === 0) status = "stockout";
     else if (daysOfSupply < 14) status = "critical";
     else if (daysOfSupply < 30) status = "low";
-
-    results.push({
-      sku,
-      name,
-      stock,
-      units7d,
+    return {
+      sku, name, stock, units7d,
       revenue7d: Math.round(revenue7d),
-      dailyAvg,
-      daysOfSupply,
-      weeksOfSupply,
-      reorderPoint,
-      needsReorder,
-      reorderQty,
-      status,
-    });
-  }
-
-  return results;
-}
-
-// ─── OUTPUT ────────────────────────────────────────────────────────────────
-function buildReport(skuMetrics, shopifyToday, twStats, inboundPOs) {
-  const totalStock = skuMetrics.reduce((s, r) => s + r.stock, 0);
-  const stockouts  = skuMetrics.filter(r => r.status === "stockout").length;
-  const criticals  = skuMetrics.filter(r => r.status === "critical").length;
-  const needsOrder = skuMetrics.filter(r => r.needsReorder);
-
-  return {
-    syncedAt: new Date().toISOString(),
-    summary: {
-      totalUnitsAllSKUs: totalStock,
-      skusInStockout:    stockouts,
-      skusCritical:      criticals,
-      ordersToday:       shopifyToday.ordersToday,
-      revenueToday:      Math.round(shopifyToday.revenueToday),
-      unitsToday:        shopifyToday.unitsToday,
-      blendedROAS7d:     twStats.blendedROAS,
-      adSpend7d:         twStats.totalSpend,
-      revenue7d:         twStats.netRevenue,
-    },
-    skus: skuMetrics,
-    reorderAlerts: needsOrder.map(s => ({
-      sku:        s.sku,
-      name:       s.name,
-      stock:      s.stock,
-      daysLeft:   s.daysOfSupply,
-      orderQty:   s.reorderQty,
-      urgency:    s.status === "stockout" ? "IMMEDIATE" : s.daysOfSupply < 21 ? "HIGH" : "MEDIUM",
-    })),
-    inboundContainers: inboundPOs,
-    leadTimes: {
-      withPackaging:    `${LEAD_TIME_PKG_READY} weeks`,
-      withoutPackaging: `${LEAD_TIME_NO_PKG} weeks`,
-      safetyStock:      `${SAFETY_STOCK_DAYS} days`,
-      targetCoverage:   `${TARGET_COVERAGE_DAYS} days`,
-    },
-  };
+      dailyAvg, daysOfSupply,
+      weeksOfSupply: Math.round(daysOfSupply / 7 * 10) / 10,
+      reorderPoint, needsReorder: stock <= reorderPoint,
+      reorderQty, status,
+    };
+  });
 }
 
 // ─── MAIN ──────────────────────────────────────────────────────────────────
 async function main() {
   log("=== Quasi Supply Chain Sync Starting ===");
 
-  // Validate keys
-  if (!SHOPIFY_TOKEN) throw new Error("Missing SHOPIFY_TOKEN in .env");
-  if (!TW_API_KEY)    throw new Error("Missing TW_API_KEY in .env");
-  if (!SSK_API_KEY)   throw new Error("Missing SSK_API_KEY in .env");
+  if (!SHOPIFY_CLIENT_ID)     throw new Error("Missing SHOPIFY_CLIENT_ID");
+  if (!SHOPIFY_CLIENT_SECRET) throw new Error("Missing SHOPIFY_CLIENT_SECRET");
+  if (!TW_API_KEY)            throw new Error("Missing TW_API_KEY");
+  if (!SSK_API_KEY)           throw new Error("Missing SSK_API_KEY");
 
-  // Fetch all data in parallel
   const [
     shopifyInventory,
     { skuSales, totalOrders, totalRevenue, preOrderCount },
@@ -439,39 +327,41 @@ async function main() {
     getShipSidekickInbound(),
   ]);
 
-  // Calculate per-SKU metrics
   const skuMetrics = calcSKUMetrics(shopifyInventory, skuSales, sskInventory);
 
-  // Build final report
-  const report = buildReport(skuMetrics, shopifyToday, twStats, inboundPOs);
+  const report = {
+    syncedAt: new Date().toISOString(),
+    summary: {
+      totalUnitsAllSKUs: skuMetrics.reduce((s, r) => s + r.stock, 0),
+      skusInStockout:    skuMetrics.filter(r => r.status === "stockout").length,
+      skusCritical:      skuMetrics.filter(r => r.status === "critical").length,
+      ordersToday:       shopifyToday.ordersToday,
+      revenueToday:      Math.round(shopifyToday.revenueToday),
+      unitsToday:        shopifyToday.unitsToday,
+      blendedROAS7d:     twStats.blendedROAS,
+      adSpend7d:         twStats.totalSpend,
+      revenue7d:         twStats.netRevenue,
+      preOrdersPending:  preOrderCount,
+    },
+    skus: skuMetrics,
+    reorderAlerts: skuMetrics.filter(r => r.needsReorder).map(s => ({
+      sku: s.sku, name: s.name, stock: s.stock,
+      daysLeft: s.daysOfSupply, orderQty: s.reorderQty,
+      urgency: s.status === "stockout" ? "IMMEDIATE" : s.daysOfSupply < 21 ? "HIGH" : "MEDIUM",
+    })),
+    inboundContainers: inboundPOs,
+  };
 
-  // Write JSON output (GitHub Actions picks this up)
-  const outputPath = "./supply-chain-data.json";
-  fs.writeFileSync(outputPath, JSON.stringify(report, null, 2));
-  log(`Report written to ${outputPath}`);
-
-  // Print summary to console
-  log("=== SYNC COMPLETE ===");
+  fs.writeFileSync("./supply-chain-data.json", JSON.stringify(report, null, 2));
+  log("Report written to supply-chain-data.json");
   log(`Total stock: ${report.summary.totalUnitsAllSKUs.toLocaleString()} units`);
-  log(`Orders today: ${report.summary.ordersToday} ($${report.summary.revenueToday.toLocaleString()})`);
-  log(`Blended ROAS (7d): ${report.summary.blendedROAS7d ?? "N/A"}`);
-  log(`SKUs needing reorder: ${report.reorderAlerts.length}`);
-
+  log(`Orders today: ${report.summary.ordersToday}`);
+  log(`Reorder alerts: ${report.reorderAlerts.length}`);
   if (report.reorderAlerts.length > 0) {
-    log("⚠️  REORDER ALERTS:");
-    for (const alert of report.reorderAlerts) {
-      log(`   ${alert.urgency} — ${alert.name}: ${alert.stock} units left (${alert.daysLeft}d), order ${alert.orderQty} units`);
+    for (const a of report.reorderAlerts) {
+      log(`  ${a.urgency} — ${a.name}: ${a.stock} units (${a.daysLeft}d), order ${a.orderQty}`);
     }
   }
-
-  if (inboundPOs.length > 0) {
-    log("🚢 INBOUND CONTAINERS:");
-    for (const po of inboundPOs) {
-      log(`   PO ${po.poNumber}: ${po.qty} units, ETA ${po.expectedDate}, status: ${po.status}`);
-    }
-  }
-
-  return report;
 }
 
 main().catch(err => {
