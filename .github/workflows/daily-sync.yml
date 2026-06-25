@@ -1,0 +1,32 @@
+name: Quasi Supply Chain Daily Sync
+
+on:
+  schedule:
+    - cron: '0 11 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Run sync
+        env:
+          SHOPIFY_TOKEN: ${{ secrets.SHOPIFY_TOKEN }}
+          TW_API_KEY: ${{ secrets.TW_API_KEY }}
+          SSK_API_KEY: ${{ secrets.SSK_API_KEY }}
+        run: node sync.js
+      - name: Save data
+        run: |
+          git config user.email "bot@quasi.com"
+          git config user.name "Supply Chain Bot"
+          git add supply-chain-data.json
+          git diff --staged --quiet || git commit -m "sync $(date +'%Y-%m-%d')"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
