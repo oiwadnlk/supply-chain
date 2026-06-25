@@ -8,18 +8,76 @@ const TW_API_KEY            = process.env.TW_API_KEY;
 const SSK_API_KEY           = process.env.SSK_API_KEY;
 
 const PRODUCTS = [
-  { name:"Bio Collagen Mask",  sskSku:"GLOWUP-ORIGINAL-QUAS", shopifySku:"QUASI-GLOWUP-OG",    dropship:false },
-  { name:"Salmon PDRM Mask",   sskSku:"SALMON-MASK-QUAS",     shopifySku:"QUASI-GLOWUP-SALMON", dropship:false },
-  { name:"Neck Mask",          sskSku:"NECK-QUAS",             shopifySku:"199284415690",         dropship:false },
-  { name:"Night Sealing Mask", sskSku:"SEALING-OIL-QUAS",     shopifySku:"25341366",             dropship:false },
-  { name:"Chest Mask",         sskSku:"CHEST-QUAS",            shopifySku:"199284450646",         dropship:false },
-  { name:"Multi Balm Stick",   sskSku:null, shopifySku:null,   dropship:true },
-  { name:"Eye Patches",        sskSku:null, shopifySku:null,   dropship:true },
+  {
+    name:"Bio Collagen Mask",
+    sskSku:"GLOWUP-ORIGINAL-QUAS", shopifySku:"QUASI-GLOWUP-OG",
+    shopifySkuAliases:[], // additional Shopify SKUs for same physical product
+    dropship:false,
+    // Lead time settings
+    productionDays: 20,
+    shippingDays:   40,
+    totalLeadDays:  60,   // production + shipping
+    safetyStockDays:21,
+    targetCoverageDays:90,
+    containerUnits: 76032,
+    // Amazon FBA buffer (units to keep available for FBA replenishment)
+    amazonBuffer:   10000,
+  },
+  {
+    name:"Salmon PDRM Mask",
+    sskSku:"SALMON-MASK-QUAS", shopifySku:"QUASI-GLOWUP-SALMON",
+    shopifySkuAliases:[],
+    dropship:false,
+    productionDays: 20,
+    shippingDays:   40,
+    totalLeadDays:  60,
+    safetyStockDays:21,
+    targetCoverageDays:90,
+    containerUnits: 76032,
+    amazonBuffer:   5000,
+  },
+  {
+    name:"Neck Mask",
+    sskSku:"NECK-QUAS", shopifySku:"199284415690",
+    shopifySkuAliases:[],
+    dropship:false,
+    productionDays: 20,   // TBC
+    shippingDays:   40,   // TBC
+    totalLeadDays:  60,   // TBC - update when confirmed
+    safetyStockDays:21,
+    targetCoverageDays:90,
+    containerUnits: 50000,// TBC
+    amazonBuffer:   3000,
+  },
+  {
+    name:"Night Sealing Mask",
+    sskSku:"SEALING-OIL-QUAS", shopifySku:"25341366",
+    shopifySkuAliases:[],
+    dropship:false,
+    productionDays: 35,
+    shippingDays:   40,
+    totalLeadDays:  75,
+    safetyStockDays:21,
+    targetCoverageDays:90,
+    containerUnits: 50000,// TBC
+    amazonBuffer:   2000,
+  },
+  {
+    name:"Chest Mask",
+    sskSku:"CHEST-QUAS", shopifySku:"199284450646",
+    shopifySkuAliases:[],
+    dropship:false,
+    productionDays: 20,   // TBC
+    shippingDays:   40,   // TBC
+    totalLeadDays:  60,   // TBC
+    safetyStockDays:21,
+    targetCoverageDays:90,
+    containerUnits: 50000,// TBC
+    amazonBuffer:   2000,
+  },
+  { name:"Multi Balm Stick", sskSku:null, shopifySku:null, dropship:true },
+  { name:"Eye Patches",      sskSku:null, shopifySku:null, dropship:true },
 ];
-
-const LEAD_TIME_WEEKS      = 9;
-const SAFETY_STOCK_DAYS    = 21;
-const TARGET_COVERAGE_DAYS = 90;
 
 function log(msg){ console.log(`[${new Date().toISOString()}] ${msg}`); }
 function todayET(){ return new Date().toLocaleDateString("en-CA",{timeZone:"America/New_York"}); }
@@ -182,9 +240,16 @@ async function getTripleWhale(){
     const spend = findMetric("blendedAds","blendedAdSpend","totalSpend","total-spend","blendedSpend","spend","adSpend","ads");
     const sales = findMetric("blendedSales","blended-sales","totalSales","sales","total-sales");
     const rev   = findMetric("netSales","net-revenue","netRevenue","orderRevenue");
+    // Amazon specific
+    const amazonRevenue = findMetric("amazonSales","amazon_sales","amazonRevenue");
+    const amazonOrders  = findMetric("amazonOrders","amazon_orders");
+    const amazonROAS    = findMetric("amazonROAS","amazon_roas");
+    const amazonSpend   = findMetric("amazonAds","amazon_spend");
 
-    log(`TW extracted: ROAS=${roas}, spend=${spend}, sales=${sales}, rev=${rev}`);
-    return {blendedROAS:roas, totalSpend:spend, blendedSales:sales, netRevenue:rev};
+    log(`TW extracted: ROAS=${roas}, spend=${spend}, sales=${sales}`);
+    log(`TW Amazon: revenue=${amazonRevenue}, orders=${amazonOrders}, ROAS=${amazonROAS}`);
+    return {blendedROAS:roas, totalSpend:spend, blendedSales:sales, netRevenue:rev,
+      amazonRevenue, amazonOrders, amazonROAS, amazonSpend};
   }catch(e){
     log(`TW error: ${e.message}`);
     return {blendedROAS:null,totalSpend:null,blendedSales:null,netRevenue:null};
@@ -315,27 +380,67 @@ function calcProducts(inv, skuSales7d, skuSalesYesterday){
     if(p.dropship) return {name:p.name,sskSku:"dropship",dropship:true,
       stock:"dropship",units7d:0,unitsToday:0,dailyAvg:0,daysOfSupply:null,
       reorderPoint:0,needsReorder:false,reorderQty:0,status:"dropship"};
-    // SSK inventory keyed by sskSku; fallback to shopifySku
+
+    // Aggregate sales across primary SKU + any aliases
+    const allSkus=[p.shopifySku,...(p.shopifySkuAliases||[])];
+    const units7d=allSkus.reduce((a,s)=>a+(skuSales7d[s]?.units??0),0);
+    const unitsToday=allSkus.reduce((a,s)=>a+(skuSalesYesterday[s]?.units??0),0);
+    const revenue7d=allSkus.reduce((a,s)=>a+(skuSales7d[s]?.revenue??0),0);
+
+    // SSK inventory
     const stock=Math.max(0,inv[p.sskSku]??inv[p.shopifySku]??0);
-    const units7d=skuSales7d[p.shopifySku]?.units??0;
-    const unitsToday=skuSalesYesterday[p.shopifySku]?.units??0;
-    const revenue7d=skuSales7d[p.shopifySku]?.revenue??0;
     const dailyAvg=Math.round((units7d/7)*10)/10;
     const daysOfSupply=dailyAvg>0?Math.round(stock/dailyAvg):(stock>0?999:0);
-    const reorderPoint=Math.round(dailyAvg*LEAD_TIME_WEEKS*7);
-    const reorderQty=Math.max(0,Math.round(dailyAvg*(TARGET_COVERAGE_DAYS+SAFETY_STOCK_DAYS))-stock);
+
+    // Per-SKU lead time based reorder point
+    const leadDays  = p.totalLeadDays   ?? 63;
+    const safetyDays= p.safetyStockDays ?? 21;
+    const targetDays= p.targetCoverageDays ?? 90;
+    const reorderPoint=Math.round(dailyAvg*leadDays);
+    // Reorder qty: enough to cover target + safety, minus what's in stock
+    // Round up to nearest container
+    const containerUnits = p.containerUnits ?? 50000;
+    const rawReorderQty=Math.max(0,Math.round(dailyAvg*(targetDays+safetyDays))-stock);
+    // Round up to nearest full container
+    const containers=Math.ceil(rawReorderQty/containerUnits);
+    const reorderQty=containers*containerUnits;
+
+    // Status thresholds based on lead time (not fixed days)
+    const criticalDays=Math.round(leadDays*0.33); // critical if <1/3 of lead time left
+    const lowDays=Math.round(leadDays*0.66);
     let status="healthy";
     if(stock===0)status="stockout";
-    else if(daysOfSupply<14)status="critical";
-    else if(daysOfSupply<30)status="low";
-    return {name:p.name,sskSku:p.sskSku,shopifySku:p.shopifySku,dropship:false,
-      stock,units7d,unitsToday,revenue7d:Math.round(revenue7d),dailyAvg,daysOfSupply,
-      weeksOfSupply:Math.round(daysOfSupply/7*10)/10,reorderPoint,
-      needsReorder:stock<=reorderPoint,reorderQty,status};
+    else if(daysOfSupply<criticalDays)status="critical";
+    else if(daysOfSupply<lowDays)status="low";
+
+    return {
+      name:p.name, sskSku:p.sskSku, shopifySku:p.shopifySku, dropship:false,
+      stock, units7d, unitsToday, revenue7d:Math.round(revenue7d),
+      dailyAvg, daysOfSupply,
+      weeksOfSupply:Math.round(daysOfSupply/7*10)/10,
+      reorderPoint, needsReorder:stock<=reorderPoint,
+      reorderQty, containers,
+      // Lead time info for dashboard display
+      leadDays, productionDays:p.productionDays, shippingDays:p.shippingDays,
+      containerUnits, safetyStockDays:safetyDays,
+      status,
+      // When to order by (today + days of supply - lead time)
+      orderByDays: daysOfSupply>0 ? Math.max(0, daysOfSupply-leadDays) : 0,
+    };
   });
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
+function loadPOs(){
+  // Read manually maintained PO file from repo
+  try{
+    if(fs.existsSync("./purchase-orders.json")){
+      return JSON.parse(fs.readFileSync("./purchase-orders.json","utf8"));
+    }
+  }catch(e){ log("PO file read error: "+e.message); }
+  return [];
+}
+
 async function main(){
   log("=== Supply Chain Sync Starting ===");
   if(!SHOPIFY_CLIENT_ID)     throw new Error("Missing SHOPIFY_CLIENT_ID");
@@ -347,6 +452,7 @@ async function main(){
     getSSKInventory(), getSSKInbound(),
     getShopifyOrdersYesterday(), getShopifyOrders7d(), getTripleWhale(),
   ]);
+  const manualPOs = loadPOs();
 
   const products=calcProducts(sskInv||{}, sales7d, yesterday.skuSalesYesterday);
   const tracked=products.filter(p=>!p.dropship);
@@ -354,6 +460,9 @@ async function main(){
     name:p.name,sskSku:p.sskSku,stock:p.stock,daysLeft:p.daysOfSupply,orderQty:p.reorderQty,
     urgency:p.status==="stockout"?"IMMEDIATE":p.daysOfSupply<21?"HIGH":"MEDIUM",
   }));
+
+  // Merge SSK inbound with manually tracked POs
+  const allPOs=[...sskInbound, ...manualPOs.map(po=>({...po,source:"manual"}))];
 
   const report={
     syncedAt:new Date().toISOString(),
@@ -367,8 +476,13 @@ async function main(){
       usSplit:yesterday.usSplit,
       blendedROAS:tw.blendedROAS,    adSpend:tw.totalSpend,
       blendedSales:tw.blendedSales,  netRevenue:tw.netRevenue,
+      // Amazon via Triple Whale
+      amazonRevenue:tw.amazonRevenue, amazonOrders:tw.amazonOrders,
+      amazonROAS:tw.amazonROAS,       amazonSpend:tw.amazonSpend,
     },
-    products, reorderAlerts, inboundContainers:sskInbound,
+    products, reorderAlerts,
+    inboundContainers: allPOs,
+    purchaseOrders: manualPOs,
   };
 
   fs.writeFileSync("./supply-chain-data.json",JSON.stringify(report,null,2));
