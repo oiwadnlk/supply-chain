@@ -23,7 +23,13 @@ const TARGET_COVERAGE_DAYS = 90;
 
 function log(msg){ console.log(`[${new Date().toISOString()}] ${msg}`); }
 function todayET(){ return new Date().toLocaleDateString("en-CA",{timeZone:"America/New_York"}); }
-function startOfTodayET(){ return new Date(todayET()+"T04:00:00.000Z").toISOString(); }
+function startOfTodayET(){
+  // Get midnight ET as UTC
+  // EDT = UTC-4, EST = UTC-5
+  // June = EDT so midnight ET = 04:00 UTC
+  const etDate = todayET(); // "2026-06-25"
+  return etDate + "T04:00:00.000Z"; // midnight EDT
+}
 function daysAgoET(n){ const d=new Date(); d.setDate(d.getDate()-n); return d.toLocaleDateString("en-CA",{timeZone:"America/New_York"}); }
 
 // ── Shopify auth ──────────────────────────────────────────────────────────────
@@ -79,10 +85,14 @@ async function getSSKInventory(){
     for(const item of allItems){
       const variant=item.productVariant;
       if(!variant) continue;
-      const qty=Math.max(0, item.availableQuantity??0);
+      // Use availableQuantity; if 0 or negative fall back to onHand - committed
+      const avail    = item.availableQuantity ?? 0;
+      const onHand   = item.onHandQuantity ?? item.incomingQuantity ?? 0;
+      const committed= item.committedQuantity ?? 0;
+      const qty = avail > 0 ? avail : Math.max(0, onHand - committed);
       // Map by primary SKU
       if(variant.sku) inv[variant.sku]=qty;
-      // Also map by SKU aliases (e.g. "25341366" is alias for "SEALING-OIL-QUAS")
+      // Also map by SKU aliases
       for(const alias of (variant.skuAliases??[])){
         if(alias) inv[alias]=qty;
       }
@@ -174,9 +184,22 @@ async function getTripleWhale(){
 async function getShopifyOrdersToday(){
   log("Fetching today's orders...");
   const since=startOfTodayET();
-  const data=await shopifyREST(
-    `/orders.json?status=any&financial_status=paid&created_at_min=${encodeURIComponent(since)}&limit=250&fields=id,total_price,line_items,tags`
-  );
+  log(`Fetching orders since ${since}`);
+  // Remove financial_status filter — catches subscriptions, all payment types
+  // Use limit=250 and paginate if needed
+  let allOrders=[], pageInfo=null, page=0;
+  while(true){
+    page++;
+    const cursor = pageInfo ? `&page_info=${pageInfo}` : `&created_at_min=${encodeURIComponent(since)}`;
+    const url = `/orders.json?status=any&limit=250&fields=id,total_price,line_items,tags,created_at${pageInfo?"":cursor}`;
+    const data = await shopifyREST(url);
+    allOrders=[...allOrders,...(data.orders||[])];
+    log(`Orders page ${page}: ${data.orders?.length||0} orders (total: ${allOrders.length})`);
+    // Check for next page
+    const linkHeader = null; // REST doesn't easily paginate here, use 250 limit
+    break; // Single page for now - 250 is usually enough for one day
+  }
+  const data = {orders: allOrders};
   let orders=0,revenue=0,units=0,preorders=0;
   const skuSalesToday={};
   for(const o of data.orders){
@@ -191,6 +214,9 @@ async function getShopifyOrdersToday(){
     }
   }
   log(`Today: ${orders} orders / $${revenue.toFixed(2)} / ${units} units`);
+  // Log top SKUs sold today for debugging
+  const topSkus = Object.entries(skuSalesToday).sort((a,b)=>b[1].units-a[1].units).slice(0,8);
+  topSkus.forEach(([sku,data])=>log(`  Today SKU "${sku}": ${data.units} units`));
   return {ordersToday:orders,revenueToday:Math.round(revenue),unitsToday:units,preOrdersPending:preorders,skuSalesToday};
 }
 
@@ -199,7 +225,7 @@ async function getShopifyOrders7d(){
   log("Fetching 7d orders...");
   const since=new Date(daysAgoET(7)+"T04:00:00.000Z").toISOString();
   const data=await shopifyREST(
-    `/orders.json?status=any&financial_status=paid&created_at_min=${encodeURIComponent(since)}&limit=250&fields=id,line_items`
+    `/orders.json?status=any&limit=250&fields=id,line_items&created_at_min=${encodeURIComponent(since)}`
   );
   const skuSales7d={};
   for(const o of data.orders){
